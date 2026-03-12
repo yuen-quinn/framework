@@ -142,6 +142,7 @@ class PostgresConnector implements DatabaseConnection {
       if (query.toUpperCase().contains('RETURNING')) {
         // For queries with RETURNING clause, use select to get the returned values
         final result = await select(query, bindings);
+        
         if (result.isNotEmpty) {
           // Return the first column (usually the ID) from the first row
           final firstRow = result.first;

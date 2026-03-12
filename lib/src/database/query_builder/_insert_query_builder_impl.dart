@@ -73,7 +73,19 @@ abstract mixin class InsertQueryBuilderImpl implements QueryBuilder {
 
       // Check database type more accurately
       final connType = conn.runtimeType.toString();
-      final isPostgreSQL = connType.contains('Postgres');
+      String underlyingConnType = connType;
+      
+      // If using DatabaseConnectionProxy, check the underlying connection
+      if (connType.contains('DatabaseConnectionProxy')) {
+        try {
+          final underlyingConn = (conn as dynamic).underlyingConnection;
+          underlyingConnType = underlyingConn.runtimeType.toString();
+        } catch (e) {
+          // Fallback to proxy type if can't access underlying connection
+        }
+      }
+      
+      final isPostgreSQL = underlyingConnType.contains('Postgres');
       
       if (isPostgreSQL) {
         // For PostgreSQL, add RETURNING clause and use insert method
