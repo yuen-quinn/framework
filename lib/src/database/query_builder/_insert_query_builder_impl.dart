@@ -71,10 +71,22 @@ abstract mixin class InsertQueryBuilderImpl implements QueryBuilder {
           })
           .join(", ");
 
+      // Check if we're using PostgreSQL to add RETURNING clause
+      final isPostgreSQL = conn.runtimeType.toString().contains('Postgres');
+      final returningClause = isPostgreSQL ? ' RETURNING id' : '';
+      
       final query =
-          "INSERT INTO $getTable (${columns.join(', ')}) VALUES ($placeholders)";
-      final id = await conn.insert(query, paramBindings);
-      return id;
+          "INSERT INTO $getTable (${columns.join(', ')}) VALUES ($placeholders)$returningClause";
+      
+      if (isPostgreSQL) {
+        // For PostgreSQL, use select to get the returned ID
+        final result = await conn.select(query, paramBindings);
+        return result.first['id'];
+      } else {
+        // For MySQL and SQLite, use insert method which returns lastInsertID
+        final id = await conn.insert(query, paramBindings);
+        return id;
+      }
     } catch (e) {
       rethrow;
     }
