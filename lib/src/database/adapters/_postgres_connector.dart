@@ -138,11 +138,25 @@ class PostgresConnector implements DatabaseConnection {
     Map<String, dynamic> bindings = const {},
   ]) async {
     try {
-      final result = await _connection.execute(
-        Sql.named(query.replaceAll(':p', '@p')),
-        parameters: bindings,
-      );
-      return result.affectedRows;
+      // Check if query has RETURNING clause
+      if (query.toUpperCase().contains('RETURNING')) {
+        // For queries with RETURNING clause, use select to get the returned values
+        final result = await select(query, bindings);
+        if (result.isNotEmpty) {
+          // Return the first column (usually the ID) from the first row
+          final firstRow = result.first;
+          final firstValue = firstRow.values.first;
+          return firstValue;
+        }
+        return 0; // No rows returned
+      } else {
+        // For regular INSERT queries without RETURNING, return affected rows
+        final result = await _connection.execute(
+          Sql.named(query.replaceAll(':p', '@p')),
+          parameters: bindings,
+        );
+        return result.affectedRows;
+      }
     } catch (e) {
       rethrow;
     }
