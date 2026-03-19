@@ -2,6 +2,9 @@ import 'sql_grammar.dart';
 
 /// PostgreSQL-specific SQL grammar (Single Responsibility Principle)
 class PostgreSqlGrammar extends BaseGrammar {
+  /// Track columns that were converted to SERIAL
+  final Set<String> _serialColumns = {};
+  
   @override
   String get identifierQuote => '"';
 
@@ -57,7 +60,10 @@ class PostgreSqlGrammar extends BaseGrammar {
   Map<String, String Function(Match)> get regexTransformations => {
     // Auto-increment primary key transformation - handle table.id() pattern
     r'[`"](\w+)[`"]\s+BIGINT(?:\(\d+\))?\s+(?:UNSIGNED\s+)?NOT\s+NULL\s+AUTO_INCREMENT':
-        (match) => '"${match[1]}" SERIAL NOT NULL PRIMARY KEY',
+        (match) {
+          _serialColumns.add(match[1]!);
+          return '"${match[1]}" SERIAL NOT NULL PRIMARY KEY';
+        },
 
     r'\s+ON\s+UPDATE\s+CURRENT_TIMESTAMP': (match) => '',
     r'ON\s+UPDATE\s+CURRENT_TIMESTAMP': (match) => '',
@@ -66,9 +72,17 @@ class PostgreSqlGrammar extends BaseGrammar {
     r'[`"](\w+)[`"]\s+BIGINT(?:\(\d+\))?\s+(?:UNSIGNED\s+)?NOT\s+NULL(?!\s+AUTO_INCREMENT)':
         (match) => '"${match[1]}" BIGINT NOT NULL',
 
-    // Remove primary key declarations when SERIAL is used
-    r',\s*PRIMARY KEY \([`"][^`"]+[`"]\)': (match) => '',
-    r'PRIMARY KEY \([`"][^`"]+[`"]\)\s*,?': (match) => '',
+    // Remove primary key declarations only when SERIAL is used for the same column
+    r',\s*PRIMARY KEY \([`"](\w+)[`"]\)': (match) {
+      final columnName = match.group(1);
+      // Only remove if this column was converted to SERIAL
+      return _serialColumns.contains(columnName) ? '' : match.group(0)!;
+    },
+    r'PRIMARY KEY \([`"](\w+)[`"]\)\s*,?': (match) {
+      final columnName = match.group(1);
+      // Only remove if this column was converted to SERIAL  
+      return _serialColumns.contains(columnName) ? '' : match.group(0)!;
+    },
 
     // Remove INDEX declarations - more comprehensive patterns
     r',\s*INDEX\s+[`"][^`"]*[`"]\s*\([^)]*\)': (match) => '',
@@ -103,6 +117,9 @@ class PostgreSqlGrammar extends BaseGrammar {
 
   @override
   String convertQuery(String query) {
+    // Reset serial columns tracking for each query
+    _serialColumns.clear();
+    
     String result = super.convertQuery(query);
 
     // Additional PostgreSQL-specific cleanup
